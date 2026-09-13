@@ -1,0 +1,18 @@
+# --- secrets: never commit these ---
+config/settings.json
+config/enctoken.json
+
+# --- python junk ---
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# --- data files (can be huge) ---
+data/DataBank/*
+!data/DataBank/.gitkeep
+
+# --- editor / os ---
+.DS_Store
+.vscode/
+.idea/

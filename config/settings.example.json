@@ -1,0 +1,23 @@
+{
+  "_help": "Copy this file to settings.json (same folder) and fill in your details. settings.json is git-ignored.",
+
+  "zerodha": {
+    "user_id": "AB1234",
+    "password": "your-kite-password",
+    "totp_secret": ""
+  },
+
+  "gmail": {
+    "email": "you@gmail.com",
+    "app_password": "xxxx xxxx xxxx xxxx",
+    "folder": "Inbox"
+  },
+
+  "auth": {
+    "mode": "auto",
+    "twofa_method": "gmail_otp",
+    "otp_wait_attempts": 10,
+    "otp_wait_seconds": 10,
+    "manual_web_port": 5055
+  }
+}

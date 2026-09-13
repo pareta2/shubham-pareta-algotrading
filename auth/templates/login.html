@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Step 1 · Zerodha Kite login</h1>
+  <p class="sub">Your details go straight to kite.zerodha.com from this computer. Nothing is stored except the final enctoken.</p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/login">
+    <label>User ID</label>
+    <input type="text" name="user_id" value="{{ user_id }}" placeholder="AB1234" required>
+
+    <label>Password</label>
+    <input type="password" name="password" required>
+
+    <label>How do you get your 2FA code?</label>
+    <label class="radio"><input type="radio" name="method" value="otp" checked> OTP on SMS / Email</label>
+    <label class="radio"><input type="radio" name="method" value="totp"> TOTP (authenticator app)</label>
+
+    <button type="submit">Continue →</button>
+  </form>
+
+  <hr>
+  <form method="post" action="/login">
+    <label>Already have an enctoken? Paste it here <small>(optional shortcut)</small></label>
+    <input type="text" name="enctoken" placeholder="copied from browser cookies">
+    <button type="submit" style="background:#666">Use this enctoken</button>
+  </form>
+{% endblock %}

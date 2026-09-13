@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Kite Login - Shubham Pareta AlgoTrading</title>
+  <style>
+    body   { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f6f9; margin:0; }
+    .card  { max-width: 420px; margin: 60px auto; background:#fff; padding:32px; border-radius:12px;
+             box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+    h1     { font-size: 20px; margin: 0 0 4px; }
+    p.sub  { color:#666; margin:0 0 24px; font-size:14px; }
+    label  { display:block; font-size:13px; font-weight:600; margin:14px 0 6px; }
+    input[type=text], input[type=password] {
+             width:100%; padding:10px 12px; border:1px solid #ccd; border-radius:8px; font-size:15px; box-sizing:border-box; }
+    .radio { font-weight:normal; display:inline-block; margin-right:18px; }
+    button { width:100%; margin-top:22px; padding:12px; background:#387ed1; color:#fff; border:0;
+             border-radius:8px; font-size:15px; cursor:pointer; }
+    button:hover { background:#2f6cb5; }
+    .error { background:#fdecea; color:#b3261e; padding:10px 12px; border-radius:8px; font-size:13px; margin-bottom:12px; }
+    .ok    { background:#e8f5e9; color:#1b5e20; padding:10px 12px; border-radius:8px; font-size:13px; }
+    hr     { border:0; border-top:1px solid #eee; margin:26px 0; }
+    small  { color:#888; }
+    code   { word-break: break-all; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Step 2 · Enter your 2FA code</h1>
+  <p class="sub">
+    {% if method == "sms" %}
+      Zerodha has sent a 6-digit OTP to your registered mobile and email for <b>{{ user_id }}</b>.
+    {% else %}
+      Open your authenticator app and type the 6-digit TOTP for <b>{{ user_id }}</b>.
+    {% endif %}
+  </p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/twofa">
+    <label>6-digit code</label>
+    <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autofocus required>
+    <button type="submit">Login ✓</button>
+  </form>
+{% endblock %}

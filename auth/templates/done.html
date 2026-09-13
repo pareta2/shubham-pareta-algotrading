@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Done ✅</h1>
+  <div class="ok">Login successful. The enctoken has been handed back to your Python program and saved in <b>config/enctoken.json</b>.</div>
+  <p class="sub" style="margin-top:18px">You can close this tab now and go back to the terminal.</p>
+  <details><summary><small>show enctoken</small></summary><code>{{ enctoken }}</code></details>
+{% endblock %}

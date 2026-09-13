@@ -1,0 +1,4 @@
+# Libraries this project needs. Install with:  pip install -r requirements.txt
+requests>=2.31      # talk to Zerodha Kite over HTTP
+pyotp>=2.9          # generate TOTP codes (authenticator-app style 2FA)
+flask>=3.0          # tiny local web page for MANUAL login
