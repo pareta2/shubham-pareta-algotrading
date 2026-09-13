@@ -10,8 +10,11 @@ Run everything from here.  Examples:
     python main.py auth --check          # is my saved token still valid?
     python main.py auth --force          # ignore saved token, login again
 
+    python main.py data fetch --symbol RELIANCE --interval 5minute --days 30
+    python main.py data search RELIANCE
+    python main.py data list
+
 Coming next:
-    python main.py data ...              # download candles into data/DataBank
     python main.py backtest ...
     python main.py live ...
 """
@@ -70,8 +73,12 @@ def build_parser():
     p.add_argument("--force", action="store_true", help="ignore the saved token and login again")
     p.set_defaults(func=cmd_auth)
 
+    # ---- data ---------------------------------------------------------
+    from data.cli import register as register_data
+    register_data(sub)
+
     # ---- placeholders for the next modules ----------------------------
-    for name in ("data", "backtest", "live"):
+    for name in ("backtest", "live"):
         q = sub.add_parser(name, help=f"{name} module (coming soon)")
         q.set_defaults(func=cmd_coming_soon(name))
 

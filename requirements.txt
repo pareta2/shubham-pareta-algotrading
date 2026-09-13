@@ -2,3 +2,4 @@
 requests>=2.31      # talk to Zerodha Kite over HTTP
 pyotp>=2.9          # generate TOTP codes (authenticator-app style 2FA)
 flask>=3.0          # tiny local web page for MANUAL login
+pandas>=1.5         # tables / CSV handling for the DATA and BACKTEST modules

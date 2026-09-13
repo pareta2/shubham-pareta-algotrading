@@ -36,10 +36,14 @@ shubham-pareta-algotrading/
 │   └── templates/              ← the HTML pages for MANUAL mode
 │
 ├── broker/
-│   └── kite_client.py          ← talks to Kite using the enctoken (profile, margins, ... more soon)
+│   └── kite_client.py          ← talks to Kite using the enctoken (profile, margins, ltp, historical_data)
 │
-├── data/                   ← MODULE 2: download candles → CSV   🚧 next
-│   └── DataBank/               ← CSV files land here
+├── data/                   ← MODULE 2: download candles → CSV   ✅ built
+│   ├── instruments.py          ← symbol name → instrument_token (public list, cached daily)
+│   ├── fetcher.py              ← downloads candles in chunks (Zerodha limits days per call)
+│   ├── databank.py             ← saves / merges / loads the CSV files
+│   ├── cli.py                  ← the  python main.py data ...  commands
+│   └── DataBank/               ← CSV files land here (one per symbol + interval)
 ├── backtest/               ← MODULE 3: test strategies on CSVs  🚧 later
 └── live/                   ← MODULE 4: trade live               🚧 later
 ```
@@ -187,7 +191,71 @@ python main.py auth --mode auto  # override the mode in settings.json for this r
 
 ---
 
-## 4. Troubleshooting
+## 4. Data module - download candles to CSV
+
+Every command needs a valid login; `get_kite()` handles that for you
+(it reuses the saved token or logs in using your `auth.mode`).
+
+### 4.1 Fetch candles
+
+```bash
+# last 30 days of 5-minute candles for Reliance  ->  data/DataBank/NSE_RELIANCE_5minute.csv
+python main.py data fetch --symbol RELIANCE --interval 5minute --days 30
+
+# several symbols at once, daily candles, exact date range
+python main.py data fetch --symbol NIFTY BANKNIFTY RELIANCE --interval day --from 2024-01-01 --to 2024-12-31
+
+# an option contract with open interest (exchange NFO)
+python main.py data fetch --symbol NIFTY26SEP24500CE --exchange NFO --interval 5minute --days 10 --oi
+```
+
+| option | meaning |
+|---|---|
+| `--symbol` | one or more trading symbols. Index nicknames work: `NIFTY`, `BANKNIFTY`, `FINNIFTY`, `MIDCPNIFTY`, `SENSEX`, `BANKEX`, `INDIAVIX` |
+| `--exchange` | `NSE` (default), `BSE`, `NFO`, `BFO`, `MCX`, `CDS` |
+| `--interval` | `minute` `3minute` `5minute` `10minute` `15minute` `30minute` `60minute` `day` - short forms `1m 5m 15m 1h 1d` also work |
+| `--days` | how many days back from today (default 30) |
+| `--from` / `--to` | exact dates `YYYY-MM-DD` (`--from` overrides `--days`) |
+| `--oi` | also store open interest (futures & options only) |
+
+Running the same command again later **adds the new candles** to the same CSV
+without duplicates, so you can top-up your DataBank every evening.
+
+CSV columns: `date, open, high, low, close, volume [, oi]` - `date` is plain IST time
+like `2024-02-01 09:15:00`.
+
+### 4.2 Find symbols
+
+```bash
+python main.py data search RELIANCE                    # anywhere
+python main.py data search NIFTY26SEP --exchange NFO   # this month's Nifty F&O contracts
+```
+The instrument list (about 1.1 lakh rows) is downloaded once a day from Zerodha's
+public URL into `data/DataBank/instruments.csv`.
+
+### 4.3 See what you have / quick price check
+
+```bash
+python main.py data list                       # each CSV with row count and date range
+python main.py data ltp --symbol RELIANCE NIFTY
+```
+
+### 4.4 Use the data in your own script
+
+```python
+from data import load_candles
+
+df = load_candles("RELIANCE", "5minute")       # pandas DataFrame, or None if not fetched yet
+print(df.tail())
+```
+
+Zerodha keeps intraday history for roughly the last few years and daily history
+for much longer. Requests are made in chunks (e.g. 60 days of 1-minute candles per
+call) with a short pause between them, so a big download can take a minute or two.
+
+---
+
+## 5. Troubleshooting
 
 | message | meaning / fix |
 |---|---|
@@ -198,12 +266,15 @@ python main.py auth --mode auto  # override the mode in settings.json for this r
 | `imaplib.IMAP4.error: [AUTHENTICATIONFAILED]` | wrong `gmail.app_password` or 2-Step Verification not on |
 | `2FA (step 3): Invalid TOTP` | wrong `totp_secret`, or your computer clock is off by > 30 s |
 | `Token ... has EXPIRED` | normal every morning; just run `python main.py auth` again |
+| `'XYZ' not found on NSE` | wrong spelling or wrong exchange - use `python main.py data search XYZ` |
+| `Kite API error 400: ... interval` / `... from date` | date range too old for that interval, or invalid interval name |
+| `Kite API error 429` | too many requests - wait a minute and retry (the fetcher already pauses between chunks) |
 
 ---
 
-## 5. Roadmap
+## 6. Roadmap
 
 - [x] **auth** - auto (Gmail OTP / TOTP) and manual (browser page) login
-- [ ] **data** - download candles by symbol / interval / duration into `data/DataBank/*.csv`
+- [x] **data** - download candles by symbol / interval / duration into `data/DataBank/*.csv`
 - [ ] **backtest** - run strategies on the CSVs
 - [ ] **live** - run strategies on live ticks and place orders

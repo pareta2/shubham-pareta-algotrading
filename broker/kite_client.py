@@ -7,9 +7,13 @@ The enctoken is the same token your browser uses after you log in at
 kite.zerodha.com.  Sending it in the "Authorization" header lets us call
 the same endpoints the Kite website calls.
 
-For now this class only has what the AUTH module needs (profile + margins).
-The DATA module will add historical_data(), ltp(), instruments() etc. here.
+Methods:
+    profile(), margins()                         -> used by AUTH
+    ltp(), quote(), historical_data()            -> used by DATA
 """
+
+from datetime import datetime
+from typing import List, Union
 
 import requests
 
@@ -45,6 +49,42 @@ class KiteClient:
     def margins(self) -> dict:
         """Available cash / margins for equity and commodity."""
         return self._get("/user/margins")
+
+    def ltp(self, instruments: Union[str, List[str]]) -> dict:
+        """
+        Last traded price.  instruments = "NSE:RELIANCE" or ["NSE:RELIANCE", "NSE:INFY"]
+        Returns {"NSE:RELIANCE": {"instrument_token": ..., "last_price": ...}, ...}
+        """
+        return self._get("/quote/ltp", params={"i": instruments})
+
+    def quote(self, instruments: Union[str, List[str]]) -> dict:
+        """Full quote (ohlc, volume, depth, oi ...) for one or more instruments."""
+        return self._get("/quote", params={"i": instruments})
+
+    def historical_data(self, instrument_token: int, from_date: datetime, to_date: datetime,
+                        interval: str, oi: bool = False, continuous: bool = False) -> list:
+        """
+        Candles between two dates.  ONE request only - Zerodha caps how many days
+        one request may cover, so data/fetcher.py calls this in chunks.
+
+        interval : minute, 3minute, 5minute, 10minute, 15minute, 30minute, 60minute, day
+        Returns  : [ {date, open, high, low, close, volume[, oi]}, ... ]
+        """
+        params = {
+            "from": from_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "to": to_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "oi": 1 if oi else 0,
+            "continuous": 1 if continuous else 0,
+        }
+        data = self._get(f"/instruments/historical/{instrument_token}/{interval}", params=params)
+        candles = []
+        for row in data.get("candles", []):
+            candle = {"date": row[0], "open": row[1], "high": row[2],
+                      "low": row[3], "close": row[4], "volume": row[5]}
+            if oi and len(row) > 6:
+                candle["oi"] = row[6]
+            candles.append(candle)
+        return candles
 
     def is_token_valid(self) -> bool:
         """True if the enctoken still works, False if expired / wrong."""
