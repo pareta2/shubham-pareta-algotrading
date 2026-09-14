@@ -26,7 +26,7 @@ from common.settings import get
 
 
 def manual_login(settings: dict) -> str:
-    port = get(settings, "auth", "manual_web_port", default=5055)
+    port = get(settings, "auth", "local_web_port", default=5055)
 
     logging.getLogger("werkzeug").setLevel(logging.ERROR)   # hide noisy request logs
     app = Flask(__name__)                 # Flask finds ./templates automatically

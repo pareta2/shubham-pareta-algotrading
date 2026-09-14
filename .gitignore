@@ -1,6 +1,6 @@
 # --- secrets: never commit these ---
 config/settings.json
-config/enctoken.json
+config/session.json
 
 # --- python junk ---
 __pycache__/

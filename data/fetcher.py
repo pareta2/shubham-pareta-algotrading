@@ -1,21 +1,28 @@
 """
 data/fetcher.py
 ---------------
-Downloads candles for ONE instrument between two dates.
+Downloads candles for ONE instrument - but only the parts you do not
+already have.
 
-Zerodha allows only a limited number of days per request (e.g. 60 days of
-1-minute candles).  So we slice the date range into chunks, ask for each
-chunk, and glue the pieces together.  That is all this file does.
+    fetch_missing()  1. reads the meta file  -> which date ranges are already downloaded?
+                     2. subtracts them from what you asked for -> the GAPS
+                     3. downloads each gap in chunks (Zerodha caps days per request)
+                     4. after EVERY chunk: saves the CSV + marks that chunk as covered
+                        (so if your internet drops, the next run resumes from there)
+
+    download_range() is the lower-level "just download these dates" helper.
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from typing import List, Tuple
 
 import pandas as pd
 
 from broker.kite_client import KiteClient
 from common.logger import log
-from data.databank import candles_to_dataframe
+from data.coverage import missing_ranges, split_range
+from data.databank import candles_to_dataframe, load_meta, save_candles, save_meta
 
 # Zerodha's "max days per request" for each candle size
 MAX_DAYS_PER_REQUEST = {
@@ -38,6 +45,10 @@ INTERVAL_ALIASES = {
     "1d": "day", "d": "day", "daily": "day",
 }
 
+# Today's candles are only "complete" once the market has closed.
+MARKET_CLOSE_HOUR = 16
+PAUSE_BETWEEN_CALLS = 0.4   # seconds - be polite to Zerodha's servers
+
 
 def normalize_interval(interval: str) -> str:
     """'5m' -> '5minute',  '1d' -> 'day'.  Raises if unknown."""
@@ -48,29 +59,70 @@ def normalize_interval(interval: str) -> str:
     return interval
 
 
-def fetch_candles(kite: KiteClient, instrument_token: int, interval: str,
-                  from_date: datetime, to_date: datetime, oi: bool = False,
-                  pause_seconds: float = 0.4) -> pd.DataFrame:
+def download_range(kite: KiteClient, instrument_token: int, interval: str,
+                   start: date, end: date, oi: bool = False) -> pd.DataFrame:
+    """ONE request: candles from 00:00 of `start` to 23:59:59 of `end`."""
+    candles = kite.historical_data(
+        instrument_token,
+        datetime.combine(start, datetime.min.time()),
+        datetime.combine(end, datetime.max.time().replace(microsecond=0)),
+        interval, oi=oi,
+    )
+    time.sleep(PAUSE_BETWEEN_CALLS)
+    return candles_to_dataframe(candles)
+
+
+def _complete_through(chunk_end: date) -> date:
     """
-    Download all candles from `from_date` to `to_date` (chunk by chunk)
-    and return one DataFrame sorted by date.
+    Up to which day can we call this chunk 'fully downloaded'?
+    Everything, except: today is complete only after market close.
+    """
+    today = date.today()
+    if chunk_end >= today and datetime.now().hour < MARKET_CLOSE_HOUR:
+        return today - timedelta(days=1)
+    return chunk_end
+
+
+def fetch_missing(kite: KiteClient, instrument: dict, interval: str,
+                  start: date, end: date, oi: bool = False, force: bool = False) -> int:
+    """
+    Download only what is missing between `start` and `end` for this instrument.
+    Returns the number of candles downloaded.
+
+    instrument : dict from data.instruments.find_instrument()
+    force      : ignore the meta file and download the whole range again
     """
     interval = normalize_interval(interval)
-    max_days = MAX_DAYS_PER_REQUEST[interval]
+    symbol, exchange = instrument["tradingsymbol"], instrument["exchange"]
+    token = int(instrument["instrument_token"])
 
-    all_candles = []
-    chunk_start = from_date
-    chunk_no = 0
-    while chunk_start <= to_date:
-        chunk_end = min(chunk_start + timedelta(days=max_days), to_date)
-        chunk_no += 1
-        log(f"  chunk {chunk_no}: {chunk_start.date()} -> {chunk_end.date()}")
-        candles = kite.historical_data(instrument_token, chunk_start, chunk_end, interval, oi=oi)
-        all_candles.extend(candles)
-        chunk_start = chunk_end + timedelta(days=1)
-        time.sleep(pause_seconds)          # be polite to Zerodha's servers
+    meta = load_meta(symbol, interval, exchange)
+    gaps: List[Tuple[date, date]] = [(start, end)] if force else missing_ranges(meta["covered"], (start, end))
 
-    df = candles_to_dataframe(all_candles)
-    if not df.empty:
-        df = df.drop_duplicates(subset="date").sort_values("date").reset_index(drop=True)
-    return df
+    if not gaps:
+        log(f"{symbol} {interval}: {start} -> {end} is already in the DataBank. Nothing to download.", "ok")
+        return 0
+
+    if meta["covered"] and not force:
+        have = ", ".join(f"{a}..{b}" for a, b in meta["covered"])
+        need = ", ".join(f"{a}..{b}" for a, b in gaps)
+        log(f"{symbol} {interval}: already have [{have}]", "info")
+        log(f"{symbol} {interval}: downloading only [{need}]", "step")
+    else:
+        log(f"{symbol} {interval}: downloading {start} -> {end}", "step")
+
+    total = 0
+    for gap_start, gap_end in gaps:
+        for chunk_start, chunk_end in split_range(gap_start, gap_end, MAX_DAYS_PER_REQUEST[interval]):
+            log(f"  chunk {chunk_start} -> {chunk_end}")
+            df = download_range(kite, token, interval, chunk_start, chunk_end, oi=oi)
+            if not df.empty:
+                save_candles(df, symbol, interval, exchange)
+                total += len(df)
+            done_through = _complete_through(chunk_end)
+            if done_through >= chunk_start:
+                meta["covered"].append((chunk_start, done_through))
+                save_meta(meta, symbol, interval, exchange)      # progress is safe on disk
+
+    log(f"{symbol} {interval}: {total:,} new candles saved", "ok")
+    return total

@@ -1,11 +1,19 @@
 """
 broker/kite_client.py
 ---------------------
-A very small wrapper around Zerodha Kite's web API using the *enctoken*.
+A very small wrapper around Zerodha's Kite API.  ONE class, TWO ways to log in:
 
-The enctoken is the same token your browser uses after you log in at
-kite.zerodha.com.  Sending it in the "Authorization" header lets us call
-the same endpoints the Kite website calls.
+  1. API KEY  (official Kite Connect - RECOMMENDED)
+        base url : https://api.kite.trade
+        header   : Authorization: token <api_key>:<access_token>
+
+  2. ENCTOKEN (the cookie your browser gets on kite.zerodha.com - unofficial)
+        base url : https://kite.zerodha.com/oms
+        header   : Authorization: enctoken <enctoken>
+
+The endpoint PATHS after the base url are the same for both
+(/user/profile, /orders/regular, /instruments/historical/... etc.), so the
+rest of the project never needs to know which one you used.
 
 Methods:
     profile(), margins()                         -> used by AUTH
@@ -13,27 +21,47 @@ Methods:
 """
 
 from datetime import datetime
-from typing import List, Union
+from typing import List, Optional, Union
 
 import requests
 
-KITE_API = "https://kite.zerodha.com/oms"
+KITE_CONNECT_API = "https://api.kite.trade"          # official, needs api_key + access_token
+KITE_WEB_API = "https://kite.zerodha.com/oms"        # unofficial, needs enctoken
 
 
 class KiteClient:
-    def __init__(self, enctoken: str):
-        self.enctoken = enctoken
+    def __init__(self, enctoken: Optional[str] = None,
+                 api_key: Optional[str] = None, access_token: Optional[str] = None):
         self.session = requests.Session()
-        self.session.headers.update({
-            "Authorization": f"enctoken {enctoken}",
-            "User-Agent": "Mozilla/5.0",
-        })
+        if api_key and access_token:
+            self.auth_type = "api_key"
+            self.root = KITE_CONNECT_API
+            self.session.headers.update({
+                "X-Kite-Version": "3",
+                "Authorization": f"token {api_key}:{access_token}",
+            })
+        elif enctoken:
+            self.auth_type = "enctoken"
+            self.root = KITE_WEB_API
+            self.session.headers.update({
+                "Authorization": f"enctoken {enctoken}",
+                "User-Agent": "Mozilla/5.0",
+            })
+        else:
+            raise ValueError("KiteClient needs either enctoken=... or api_key=... + access_token=...")
+
+    @classmethod
+    def from_session(cls, saved: dict) -> "KiteClient":
+        """Build a client from the dict stored in config/session.json."""
+        if saved.get("auth_type") == "api_key":
+            return cls(api_key=saved["api_key"], access_token=saved["access_token"])
+        return cls(enctoken=saved["enctoken"])
 
     # ------------------------------------------------------------------ #
     # internal helper: GET a url and return the "data" part of the JSON
     # ------------------------------------------------------------------ #
     def _get(self, path: str, params: dict = None) -> dict:
-        response = self.session.get(f"{KITE_API}{path}", params=params, timeout=15)
+        response = self.session.get(f"{self.root}{path}", params=params, timeout=15)
         body = response.json()
         if response.status_code != 200 or body.get("status") != "success":
             raise Exception(f"Kite API error {response.status_code}: {body.get('message', body)}")

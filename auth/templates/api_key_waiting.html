@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Waiting for Zerodha…</h1>
+  {% if status and status != "success" %}<div class="error">Zerodha reported status "{{ status }}". Please try logging in again from the terminal.</div>{% endif %}
+  <p class="sub">This page only listens for the <b>request_token</b> that Zerodha sends after you log in.
+  Finish the login in the Zerodha tab; this page will update by itself.</p>
+{% endblock %}

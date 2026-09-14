@@ -1,23 +1,31 @@
 {
   "_help": "Copy this file to settings.json (same folder) and fill in your details. settings.json is git-ignored.",
 
+  "auth": {
+    "mode": "api_key",
+    "local_web_port": 5055,
+    "twofa_method": "gmail_otp",
+    "otp_wait_attempts": 10,
+    "otp_wait_seconds": 10
+  },
+
+  "kite_api": {
+    "_help": "RECOMMENDED. Official Kite Connect app from https://developers.kite.trade (see README)",
+    "api_key": "",
+    "api_secret": ""
+  },
+
   "zerodha": {
+    "_help": "Needed for mode auto / manual (unofficial enctoken login). user_id is also used to label sessions.",
     "user_id": "AB1234",
-    "password": "your-kite-password",
+    "password": "",
     "totp_secret": ""
   },
 
   "gmail": {
-    "email": "you@gmail.com",
-    "app_password": "xxxx xxxx xxxx xxxx",
+    "_help": "Only for mode auto with twofa_method gmail_otp",
+    "email": "",
+    "app_password": "",
     "folder": "Inbox"
-  },
-
-  "auth": {
-    "mode": "auto",
-    "twofa_method": "gmail_otp",
-    "otp_wait_attempts": 10,
-    "otp_wait_seconds": 10,
-    "manual_web_port": 5055
   }
 }

@@ -7,10 +7,11 @@ The `python main.py data ...` commands.  Each command is one small function.
     data fetch  --symbol NIFTY BANKNIFTY --interval day --from 2024-01-01 --to 2024-12-31
     data search RELIANCE --exchange NFO
     data list
+    data verify --symbol RELIANCE --interval 5minute [--fix]
     data ltp    --symbol RELIANCE INFY
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 
@@ -18,23 +19,23 @@ from common.logger import log
 
 
 # ------------------------------------------------------------------ fetch
+def _date_range(args):
+    """--from/--to  or  --days  ->  (start_date, end_date)"""
+    end = datetime.strptime(args.to, "%Y-%m-%d").date() if args.to else date.today()
+    if args.__dict__["from"]:
+        start = datetime.strptime(args.__dict__["from"], "%Y-%m-%d").date()
+    else:
+        start = end - timedelta(days=args.days)
+    return start, end
+
+
 def cmd_fetch(args):
     from auth import get_kite
-    from data.databank import save_candles
-    from data.fetcher import fetch_candles, normalize_interval
+    from data.fetcher import fetch_missing, normalize_interval
     from data.instruments import find_instrument
 
     interval = normalize_interval(args.interval)
-
-    # work out the date range: either --from/--to or --days
-    to_date = datetime.strptime(args.to, "%Y-%m-%d") if args.to else datetime.now()
-    if args.__dict__["from"]:
-        from_date = datetime.strptime(args.__dict__["from"], "%Y-%m-%d")
-    else:
-        from_date = to_date - timedelta(days=args.days)
-    # whole days: from 00:00:00 of the first day to 23:59:59 of the last day
-    from_date = from_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    to_date = to_date.replace(hour=23, minute=59, second=59, microsecond=0)
+    start, end = _date_range(args)
 
     kite = get_kite()
     for symbol in args.symbol:
@@ -42,16 +43,29 @@ def cmd_fetch(args):
         if instrument is None:
             log(f"'{symbol}' not found on {args.exchange}. Try:  python main.py data search {symbol}", "error")
             continue
+        fetch_missing(kite, instrument, interval, start, end, oi=args.oi, force=args.force)
 
-        log(f"Fetching {instrument['tradingsymbol']} ({instrument['exchange']}) "
-            f"{interval} candles  {from_date.date()} -> {to_date.date()}", "step")
-        df = fetch_candles(kite, int(instrument["instrument_token"]), interval,
-                           from_date, to_date, oi=args.oi)
-        if df.empty:
-            log(f"No candles returned for {symbol}", "warn")
+
+# ----------------------------------------------------------------- verify
+def cmd_verify(args):
+    from data.fetcher import normalize_interval
+    from data.instruments import find_instrument
+    from data.verify import find_problems, fix_problems, print_report
+
+    interval = normalize_interval(args.interval)
+    kite = None
+    for symbol in args.symbol:
+        instrument = find_instrument(symbol, args.exchange)
+        if instrument is None:
+            log(f"'{symbol}' not found on {args.exchange}", "error")
             continue
-        path = save_candles(df, instrument["tradingsymbol"], interval, instrument["exchange"])
-        log(f"{len(df):,} candles fetched -> {path.name}", "ok")
+        problems = find_problems(instrument["tradingsymbol"], interval, instrument["exchange"])
+        print_report(instrument["tradingsymbol"], interval, problems)
+        if args.fix and (problems["empty_days"] or problems["partial_days"]):
+            if kite is None:
+                from auth import get_kite
+                kite = get_kite()
+            fix_problems(kite, instrument, interval, problems)
 
 
 # ----------------------------------------------------------------- search
@@ -106,7 +120,15 @@ def register(subparsers):
     f.add_argument("--from", help="start date YYYY-MM-DD (overrides --days)")
     f.add_argument("--to", help="end date YYYY-MM-DD (default today)")
     f.add_argument("--oi", action="store_true", help="also fetch open interest (F&O only)")
+    f.add_argument("--force", action="store_true", help="re-download everything, ignoring what is already there")
     f.set_defaults(func=cmd_fetch)
+
+    v = sub.add_parser("verify", help="check a CSV for missing / partial days (add --fix to repair)")
+    v.add_argument("--symbol", nargs="+", required=True)
+    v.add_argument("--exchange", default="NSE")
+    v.add_argument("--interval", default="5minute")
+    v.add_argument("--fix", action="store_true", help="re-download suspicious days (once)")
+    v.set_defaults(func=cmd_verify)
 
     s = sub.add_parser("search", help="search the instrument list")
     s.add_argument("text", help="part of a symbol or company name")
