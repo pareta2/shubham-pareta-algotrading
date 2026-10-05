@@ -56,6 +56,10 @@ def manual_login(settings: dict) -> str:
         user_id = request.form.get("user_id", "").strip().upper()
         password = request.form.get("password", "")
         method = request.form.get("method", "otp")
+        if not user_id or not password:
+            # the enctoken box was submitted empty
+            return redirect(url_for("page_login",
+                                    error="Paste an enctoken, or fill in user id and password."))
         try:
             kite = KiteLoginSession()
             kite.login(user_id, password)

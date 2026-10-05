@@ -52,16 +52,39 @@ def authenticate(mode: Optional[str] = None) -> dict:
     return session
 
 
+def save_enctoken(enctoken: str) -> dict:
+    """Store an enctoken you already copied from the browser - no login needed."""
+    enctoken = enctoken.strip()
+    if not enctoken:
+        raise ValueError("Empty enctoken.")
+    settings = load_settings()
+    session = {
+        "auth_type": "enctoken",
+        "enctoken": enctoken,
+        "user_id": get(settings, "zerodha", "user_id", default=""),
+    }
+    save_session(session)
+    log("enctoken saved to config/session.json", "ok")
+    return session
+
+
 def get_kite(mode: Optional[str] = None, force_new: bool = False) -> KiteClient:
     """Return a working KiteClient, logging in only when needed."""
     if not force_new:
         saved = load_session()
         if saved:
-            kite = KiteClient.from_session(saved)
-            if kite.is_token_valid():
-                log(f"Using saved {saved.get('auth_type')} session from {saved.get('generated_at')}", "ok")
-                return kite
-            log("Saved session has expired - logging in again", "warn")
-            clear_session()
+            try:
+                kite = KiteClient.from_session(saved)
+            except ValueError as e:
+                # file is there but unusable (hand-edited, missing token, ...).
+                # Treat it exactly like an expired session: say why, then log in.
+                log(f"Ignoring config/session.json - {e}".splitlines()[0], "warn")
+                clear_session()
+            else:
+                if kite.is_token_valid():
+                    log(f"Using saved {saved.get('auth_type')} session from {saved.get('generated_at')}", "ok")
+                    return kite
+                log("Saved session has expired - logging in again", "warn")
+                clear_session()
 
     return KiteClient.from_session(authenticate(mode))

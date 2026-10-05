@@ -52,10 +52,47 @@ class KiteClient:
 
     @classmethod
     def from_session(cls, saved: dict) -> "KiteClient":
-        """Build a client from the dict stored in config/session.json."""
-        if saved.get("auth_type") == "api_key":
+        """
+        Build a client from the dict stored in config/session.json.
+
+        auth_type should be "api_key" or "enctoken".  "auto" / "manual" are the
+        names of the two LOGIN MODES that produce an enctoken, so we accept them
+        here as well - people often write the mode name into the file by hand.
+        """
+        auth_type = str(saved.get("auth_type") or "").strip().lower()
+        if auth_type in ("auto", "manual"):
+            auth_type = "enctoken"
+        if not auth_type:
+            auth_type = "api_key" if saved.get("access_token") else "enctoken"
+
+        if auth_type == "enctoken":
+            if not saved.get("enctoken"):
+                raise ValueError(
+                    f"config/session.json has auth_type='{saved.get('auth_type')}' but no "
+                    "'enctoken' value.\n"
+                    "   Fix it one of these ways:\n"
+                    "   1. python main.py auth --mode manual   (the browser page has a "
+                    "'paste enctoken' box)\n"
+                    '   2. edit config/session.json to: {"auth_type": "enctoken", '
+                    '"enctoken": "<your token>", "user_id": "AB1234"}\n'
+                    '   3. if you meant to use the official API key login, set '
+                    '"auth_type": "api_key"'
+                )
+            return cls(enctoken=saved["enctoken"])
+
+        if auth_type == "api_key":
+            if not (saved.get("api_key") and saved.get("access_token")):
+                raise ValueError(
+                    "config/session.json has auth_type='api_key' but is missing "
+                    "'api_key' and/or 'access_token'.\n"
+                    "   Log in again:  python main.py auth --mode api_key"
+                )
             return cls(api_key=saved["api_key"], access_token=saved["access_token"])
-        return cls(enctoken=saved["enctoken"])
+
+        raise ValueError(
+            f"Unknown auth_type '{saved.get('auth_type')}' in config/session.json. "
+            "Use 'api_key' or 'enctoken'."
+        )
 
     # ------------------------------------------------------------------ #
     # internal helper: GET a url and return the "data" part of the JSON
